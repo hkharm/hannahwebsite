@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Wordle Clone</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #121213;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+    h1 {
+      margin-bottom: 20px;
+      color: #6aaa64;
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(5, 60px);
+      gap: 10px;
+      margin-bottom: 30px;
+    }
+    .tile {
+      width: 60px;
+      height: 60px;
+      font-size: 2rem;
+      border: 2px solid #555;
+      text-align: center;
+      line-height: 60px;
+      text-transform: uppercase;
+      background-color: #1a1a1a;
+      color: white;
+    }
+    .correct {
+      background-color: #6aaa64 !important;
+      border-color: #6aaa64;
+      color: white;
+    }
+    .present {
+      background-color: #c9b458 !important;
+      border-color: #c9b458;
+      color: white;
+    }
+    .absent {
+      background-color: #3a3a3c;
+      border-color: #3a3a3c;
+      color: white;
+    }
+    .not-in-word {
+      background-color: #b22222 !important;
+      border-color: #b22222;
+      color: white;
+    }
+    #keyboard {
+      display: grid;
+      grid-template-rows: repeat(3, auto);
+      gap: 8px;
+    }
+    .key-row {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+    }
+    #keyboard button {
+      padding: 12px;
+      font-size: 1rem;
+      font-weight: bold;
+      background-color: #818384;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      min-width: 40px;
+      text-transform: uppercase;
+      transition: background-color 0.2s;
+    }
+    #keyboard button.wide {
+      min-width: 60px;
+    }
+    #message {
+      margin-top: 15px;
+      font-size: 1.2rem;
+    }
+    #play-again {
+      display: none;
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #6aaa64;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    .confetti {
+      position: fixed;
+      top: -10px;
+      width: 10px;
+      height: 10px;
+      background-color: hsl(var(--hue), 70%, 60%);
+      animation: fall 2s linear forwards;
+    }
+    @keyframes fall {
+      to {
+        transform: translateY(100vh) rotate(360deg);
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Wordle</h1>
+  <div id="board" class="board"></div>
+  <div id="keyboard">
+    <div class="key-row" id="row1"></div>
+    <div class="key-row" id="row2"></div>
+    <div class="key-row" id="row3"></div>
+  </div>
+  <div id="message"></div>
+  <button id="play-again">Play Again</button>
+
+  <!-- Add a "Back to Resume" link -->
+  <a href="index.html" style="margin-top: 20px; color: #6aaa64; text-decoration: none; font-size: 1.2rem;">Home</a>
+
+  <script>
+    const words = ['apple', 'grape', 'plant', 'spine', 'drake', 'flame', 'crane', 'slate'];
+    let answer, currentGuess, currentRow, keyElements;
+
+    const board = document.getElementById('board');
+    const message = document.getElementById('message');
+    const playAgainBtn = document.getElementById('play-again');
+
+    const keyboardRows = {
+      row1: 'QWERTYUIOP'.split(''),
+      row2: 'ASDFGHJKL'.split(''),
+      row3: ['Enter', ...'ZXCVBNM'.split(''), 'Del']
+    };
+
+    function initGame() {
+      board.innerHTML = '';
+      message.textContent = '';
+      playAgainBtn.style.display = 'none';
+      keyElements = {};
+      currentGuess = '';
+      currentRow = 0;
+      answer = words[Math.floor(Math.random() * words.length)];
+
+      for (let i = 0; i < 6 * 5; i++) {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        board.appendChild(tile);
+      }
+
+      ['row1', 'row2', 'row3'].forEach(rowId => {
+        const row = document.getElementById(rowId);
+        row.innerHTML = '';
+        keyboardRows[rowId].forEach(letter => {
+          const btn = document.createElement('button');
+          btn.textContent = letter;
+          btn.className = (letter === 'Enter' || letter === 'Del') ? 'wide' : '';
+          btn.onclick = () => {
+            if (letter === 'Enter') submitGuess();
+            else if (letter === 'Del') deleteLetter();
+            else addLetter(letter.toLowerCase());
+          };
+          keyElements[letter.toLowerCase()] = btn;
+          row.appendChild(btn);
+        });
+      });
+    }
+
+    function addLetter(letter) {
+      if (currentGuess.length < 5) {
+        currentGuess += letter;
+        updateBoard();
+      }
+    }
+
+    function deleteLetter() {
+      currentGuess = currentGuess.slice(0, -1);
+      updateBoard();
+    }
+
+    function updateBoard() {
+      const start = currentRow * 5;
+      for (let i = 0; i < 5; i++) {
+        const tile = board.children[start + i];
+        tile.textContent = currentGuess[i] || '';
+      }
+    }
+
+    function submitGuess() {
+      if (currentGuess.length !== 5) {
+        showMessage('Not enough letters!');
+        return;
+      }
+
+      const guess = currentGuess.toLowerCase();
+      const start = currentRow * 5;
+      let letterCount = {};
+      for (let char of answer) {
+        letterCount[char] = (letterCount[char] || 0) + 1;
+      }
+
+      const tileStates = Array(5).fill('absent');
+
+      for (let i = 0; i < 5; i++) {
+        if (guess[i] === answer[i]) {
+          tileStates[i] = 'correct';
+          letterCount[guess[i]]--;
+        }
+      }
+
+      for (let i = 0; i < 5; i++) {
+        if (tileStates[i] !== 'correct' && letterCount[guess[i]] > 0) {
+          tileStates[i] = 'present';
+          letterCount[guess[i]]--;
+        }
+      }
+
+      for (let i = 0; i < 5; i++) {
+        const tile = board.children[start + i];
+        const letter = guess[i];
+        const state = tileStates[i];
+        tile.classList.add(state);
+
+        const keyBtn = keyElements[letter];
+        if (keyBtn) {
+          if (state === 'correct') {
+            keyBtn.className = 'correct';
+          } else if (state === 'present' && !keyBtn.classList.contains('correct')) {
+            keyBtn.className = 'present';
+          } else if (state === 'absent' && !keyBtn.classList.contains('correct') && !keyBtn.classList.contains('present')) {
+            keyBtn.className = 'not-in-word';
+          }
+        }
+      }
+
+      if (guess === answer) {
+        showMessage('🎉 You got it!');
+        playAgainBtn.style.display = 'inline-block';
+        disableInput();
+        launchConfetti();
+        return;
+      }
+
+      currentRow++;
+      currentGuess = '';
+
+      if (currentRow === 6) {
+        showMessage(`The word was "${answer.toUpperCase()}"`);
+        playAgainBtn.style.display = 'inline-block';
+        disableInput();
+      }
+    }
+
+    function showMessage(msg) {
+      message.textContent = msg;
+    }
+
+    function disableInput() {
+      Object.values(keyElements).forEach(btn => btn.disabled = true);
+    }
+
+    function launchConfetti() {
+      for (let i = 0; i < 100; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        confetti.style.left = Math.random() * 100 + 'vw';
+        confetti.style.setProperty('--hue', Math.floor(Math.random() * 360));
+        document.body.appendChild(confetti);
+        setTimeout(() => confetti.remove(), 2000);
+      }
+    }
+
+    playAgainBtn.onclick = initGame;
+
+    document.addEventListener('keydown', (e) => {
+      if (playAgainBtn.style.display === 'inline-block') return;
+      if (e.key === 'Enter') submitGuess();
+      else if (e.key === 'Backspace') deleteLetter();
+      else if (/^[a-zA-Z]$/.test(e.key)) addLetter(e.key.toLowerCase());
+    });
+
+    initGame();
+  </script>
+</body>
+</html>
